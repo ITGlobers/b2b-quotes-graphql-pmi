@@ -6,7 +6,7 @@ type Ctx = ParamsContext & { clients: Clients; vtex: any }
 const TOP_N = 10
 const DEFAULT_PER_PAGE = 15
 const DEFAULT_MAX_ORDERS = 60
-const DATA_ENTITY = 'SC' // Acrónimo de la entidad de caché en MDv2 (2 letras)
+const DATA_ENTITY = 'SC'
 
 async function getTopSkusFromCache(ctx: Ctx, userKey: string) {
     const { masterdata } = ctx.clients as any
@@ -109,7 +109,6 @@ export const Mutation = {
             throw new Error('Missing input.userKey')
         }
 
-        // 1) cache o cálculo
         let topItems = await getTopSkusFromCache(ctx, userKey).catch(() => null)
         if (!topItems) {
             topItems = await computeTopSkus(ctx, userKey, topN)
@@ -120,13 +119,11 @@ export const Mutation = {
             throw new Error('No items found for suggested quote')
         }
 
-        // 2) construir items para la Quote (QuoteItemInput)
         const quoteItems = topItems.map((i: any) => ({
             id: String(i.skuId),
             quantity: Number(i.qty),
         }))
 
-        // 3) persistir la Quote usando la lógica existente del proyecto
         const { mutations } = (ctx as any).graphql || {}
         if (!mutations?.createQuote) {
             throw new Error('createQuote resolver not available to be reused')

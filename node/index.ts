@@ -67,7 +67,7 @@ export default new Service<Clients, RecorderState, ParamsContext>({
     resolvers: {
       Mutation: {
         ...resolvers.Mutation,
-        ...SuggestedMutation, // <- createSuggestedQuote
+        ...SuggestedMutation,
       },
       Query: {
         ...resolvers.Query,
