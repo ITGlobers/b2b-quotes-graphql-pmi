@@ -15,6 +15,7 @@ import StorefrontPermissions from './storefrontPermissions'
 import VtexId from './vtexId'
 import SellerQuotesClient from './SellerQuotesClient'
 import SellerClient from './SellerClient'
+import { OMS } from './oms'
 
 export const getTokenToHeader = (ctx: IOContext) => {
   // provide authToken (app token) as an admin token as this is a call
@@ -96,4 +97,6 @@ export class Clients extends IOClients {
   public get seller() {
     return this.getOrSet('seller', SellerClient)
   }
+
+  public get oms() { return this.getOrSet('oms', OMS) }
 }

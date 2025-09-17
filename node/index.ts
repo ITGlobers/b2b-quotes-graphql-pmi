@@ -6,12 +6,13 @@ import type {
   RecorderState,
   ServiceContext,
 } from '@vtex/api'
-import { LRUCache, Service } from '@vtex/api'
+import { LRUCache, metrics, Service } from '@vtex/api'
 
 import { Clients } from './clients'
 import { orderHandler } from './middlewares/order'
 import { resolvers } from './resolvers'
 import { schemaDirectives } from './resolvers/directives'
+import { Mutation as SuggestedMutation } from './resolvers/suggested'
 import type SellerQuotesController from './resolvers/utils/sellerQuotesController'
 
 const TIMEOUT_MS = 5000
@@ -55,7 +56,8 @@ declare global {
   }
   type EventBroadcastContext = EventContext<Clients, RecorderState>
 }
-// Export a service that defines route handlers and client options.
+
+// Export a service that defines route handlers, events and GraphQL resolvers.
 export default new Service<Clients, RecorderState, ParamsContext>({
   clients,
   events: {
@@ -63,9 +65,16 @@ export default new Service<Clients, RecorderState, ParamsContext>({
   },
   graphql: {
     resolvers: {
-      Mutation: resolvers.Mutation,
-      Query: resolvers.Query,
-      Quote: resolvers.Quote,
+      Mutation: {
+        ...resolvers.Mutation,
+        ...SuggestedMutation, // <- createSuggestedQuote
+      },
+      Query: {
+        ...resolvers.Query,
+      },
+      Quote: {
+        ...resolvers.Quote,
+      },
     },
     schemaDirectives,
   },
