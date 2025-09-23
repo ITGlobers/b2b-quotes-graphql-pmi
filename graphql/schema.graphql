@@ -62,4 +62,9 @@ type Mutation {
   saveAppSettings(input: AppSettingsInput!): AppSettings
     @validateAdminUserAccess
     @cacheControl(scope: PRIVATE)
+  generateQuoteSuggestion(input: GenerateQuoteSuggestionInput): Quote!
+    @validateStoreUserAccess
+    @withPermissions
+    @withSession
+    @withSegment
 }

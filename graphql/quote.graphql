@@ -93,3 +93,7 @@ type Seller {
   id: String
   name: String
 }
+
+input GenerateQuoteSuggestionInput {
+  topN: Int = 10
+}

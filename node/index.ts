@@ -20,7 +20,7 @@ const TIMEOUT_MS = 5000
 // The @vtex/api HttpClient respects Cache-Control headers and uses the provided cache.
 const memoryCache = new LRUCache<string, any>({ max: 5000 })
 
-metrics.trackCache('status', memoryCache)
+// Note: metrics.trackCache was removed due to import issues
 
 // This is the configuration for clients available in `ctx.clients`.
 const clients: ClientsConfig<Clients> = {
@@ -55,7 +55,8 @@ declare global {
   }
   type EventBroadcastContext = EventContext<Clients, RecorderState>
 }
-// Export a service that defines route handlers and client options.
+
+// Export a service that defines route handlers, events and GraphQL resolvers.
 export default new Service<Clients, RecorderState, ParamsContext>({
   clients,
   events: {
@@ -63,9 +64,15 @@ export default new Service<Clients, RecorderState, ParamsContext>({
   },
   graphql: {
     resolvers: {
-      Mutation: resolvers.Mutation,
-      Query: resolvers.Query,
-      Quote: resolvers.Quote,
+      Mutation: {
+        ...resolvers.Mutation,
+      },
+      Query: {
+        ...resolvers.Query,
+      },
+      Quote: {
+        ...resolvers.Quote,
+      },
     },
     schemaDirectives,
   },
