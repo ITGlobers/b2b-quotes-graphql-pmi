@@ -124,13 +124,6 @@ async function computeTopSkus(ctx: Context, userKey: string, topN: number) {
     }
 
     const list = await oms.listOrders(authCookie, params)
-    console.log('❌ OMS listOrders response:', {
-      listType: typeof list,
-      listKeys: list ? Object.keys(list) : null,
-      ordersCount: list?.list?.length || list?.orders?.length || 0,
-      userKey,
-      page,
-    })
     const orders: any[] = list?.list || list?.orders || []
     if (!orders.length) {
       break
