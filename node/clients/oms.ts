@@ -4,10 +4,17 @@ export class OMS extends JanusClient {
     constructor(ctx: IOContext, opts?: InstanceOptions) {
         super(ctx, { ...opts })
     }
-    public listOrders(params: Record<string, any>) {
-        return this.http.get('/api/oms/pvt/orders', { params })
+
+    public listOrders(cookie: string, params: any) {
+        return this.http.get('/api/oms/pvt/orders', {
+            params,
+            headers: { VtexIdclientAutCookie: cookie },
+        })
     }
-    public getOrder(orderId: string) {
-        return this.http.get(`/api/oms/pvt/orders/${orderId}`)
+
+    public getOrder(orderId: string, cookie: string) {
+        return this.http.get(`/api/oms/pvt/orders/${orderId}`, {
+            headers: { VtexIdclientAutCookie: cookie },
+        })
     }
 }

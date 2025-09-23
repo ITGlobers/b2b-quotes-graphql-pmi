@@ -6,13 +6,12 @@ import type {
   RecorderState,
   ServiceContext,
 } from '@vtex/api'
-import { LRUCache, metrics, Service } from '@vtex/api'
+import { LRUCache, Service } from '@vtex/api'
 
 import { Clients } from './clients'
 import { orderHandler } from './middlewares/order'
 import { resolvers } from './resolvers'
 import { schemaDirectives } from './resolvers/directives'
-import { Mutation as SuggestedMutation } from './resolvers/suggested'
 import type SellerQuotesController from './resolvers/utils/sellerQuotesController'
 
 const TIMEOUT_MS = 5000
@@ -21,7 +20,7 @@ const TIMEOUT_MS = 5000
 // The @vtex/api HttpClient respects Cache-Control headers and uses the provided cache.
 const memoryCache = new LRUCache<string, any>({ max: 5000 })
 
-metrics.trackCache('status', memoryCache)
+// Note: metrics.trackCache was removed due to import issues
 
 // This is the configuration for clients available in `ctx.clients`.
 const clients: ClientsConfig<Clients> = {
@@ -67,7 +66,6 @@ export default new Service<Clients, RecorderState, ParamsContext>({
     resolvers: {
       Mutation: {
         ...resolvers.Mutation,
-        ...SuggestedMutation,
       },
       Query: {
         ...resolvers.Query,
