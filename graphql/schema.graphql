@@ -42,6 +42,12 @@ type Query {
     @withSession
     @withSegment
     @cacheControl(scope: PRIVATE, maxAge: SHORT)
+  generateQuoteSuggestion(input: GenerateQuoteSuggestionInput): QuoteSuggestion!
+    @validateStoreUserAccess
+    @withPermissions
+    @withSession
+    @withSegment
+    @cacheControl(scope: PRIVATE, maxAge: SHORT)
 }
 
 type Mutation {
@@ -62,9 +68,4 @@ type Mutation {
   saveAppSettings(input: AppSettingsInput!): AppSettings
     @validateAdminUserAccess
     @cacheControl(scope: PRIVATE)
-  generateQuoteSuggestion(input: GenerateQuoteSuggestionInput): Quote!
-    @validateStoreUserAccess
-    @withPermissions
-    @withSession
-    @withSegment
 }
