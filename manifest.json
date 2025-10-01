@@ -5,7 +5,7 @@
   "title": "B2B Quotes GraphQL",
   "description": "Backend for the B2B Quotes & Carts app",
   "builders": {
-    "graphql": "1.x",
+    "graphql": "2.x",
     "node": "6.x",
     "docs": "0.x"
   },
