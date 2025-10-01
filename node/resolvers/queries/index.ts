@@ -81,10 +81,13 @@ async function computeTopSkus(ctx: Context, userKey: string, topN: number) {
   const authCookie = ctx.vtex.authToken || ctx.cookies?.get('VtexIdclientAutCookie') || ''
   let page = 1
   let fetched = 0
+
+  // Track total quantity for sorting and purchase history for quantity calculation
   const qtyBySku = new Map<string, {
-    qty: number
+    totalQty: number
     lastPurchasedAt?: string
     itemData: any
+    orderQuantities: number[] // Track quantities from each order (most recent first)
   }>()
 
   const ninetyDaysAgo = new Date()
@@ -130,7 +133,8 @@ async function computeTopSkus(ctx: Context, userKey: string, topN: number) {
 
         const prev = qtyBySku.get(skuId) || {
           itemData: null,
-          qty: 0,
+          orderQuantities: [],
+          totalQty: 0,
         }
 
         const lastPurchasedAt =
@@ -154,7 +158,8 @@ async function computeTopSkus(ctx: Context, userKey: string, topN: number) {
         qtyBySku.set(skuId, {
           itemData,
           lastPurchasedAt,
-          qty: prev.qty + quantity,
+          orderQuantities: [...prev.orderQuantities, quantity],
+          totalQty: prev.totalQty + quantity,
         })
       }
 
@@ -169,14 +174,22 @@ async function computeTopSkus(ctx: Context, userKey: string, topN: number) {
   }
 
   const result = Array.from(qtyBySku.entries())
-      .sort((a, b) => b[1].qty - a[1].qty)
+      .sort((a, b) => b[1].totalQty - a[1].totalQty)
       .slice(0, topN)
-      .map(([skuId, v]) => ({
-        itemData: v.itemData,
-        lastPurchasedAt: v.lastPurchasedAt,
-        qty: v.qty,
-        skuId,
-      }))
+      .map(([skuId, v]) => {
+        // Calculate suggested quantity based on last 2 orders
+        const last2Orders = v.orderQuantities.slice(0, 2)
+        const suggestedQty = last2Orders.length > 0
+          ? Math.round(last2Orders.reduce((sum, q) => sum + q, 0) / last2Orders.length)
+          : 1 // Default to 1 if no recent orders
+
+        return {
+          itemData: v.itemData,
+          lastPurchasedAt: v.lastPurchasedAt,
+          qty: suggestedQty,
+          skuId,
+        }
+      })
 
   return result
 }
