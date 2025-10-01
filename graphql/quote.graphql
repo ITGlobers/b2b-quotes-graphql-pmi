@@ -97,3 +97,7 @@ type Seller {
 input GenerateQuoteSuggestionInput {
   topN: Int = 10
 }
+
+type QuoteSuggestion {
+  items: [QuoteItem]!
+}

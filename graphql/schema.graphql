@@ -2,15 +2,18 @@ type Query {
   getAppSettings: AppSettings
     @auditAccess
     @cacheControl(scope: PRIVATE, maxAge: SHORT)
+    @auth(scope: PUBLIC)
   getQuoteEnabledForUser(email: String!): Boolean
     @auditAccess
     @cacheControl(scope: PRIVATE, maxAge: SHORT)
+    @auth(scope: PUBLIC)
   getQuote(id: String): Quote
     @validateStoreUserAccess
     @withPermissions
     @withSession
     @withSegment
     @cacheControl(scope: PRIVATE, maxAge: SHORT)
+    @auth(scope: PUBLIC)
   getQuotes(
     organization: [String]
     costCenter: [String]
@@ -26,6 +29,7 @@ type Query {
     @withSession
     @withSegment
     @cacheControl(scope: PRIVATE, maxAge: SHORT)
+    @auth(scope: PUBLIC)
   getChildrenQuotes(
     id: String
     sortOrder: String = "DESC"
@@ -36,12 +40,21 @@ type Query {
     @withSession
     @withSegment
     @cacheControl(scope: PRIVATE, maxAge: SHORT)
+    @auth(scope: PUBLIC)
   checkSellerQuotes(sellers: [String!]!): [Seller!]!
     @validateStoreUserAccess
     @withPermissions
     @withSession
     @withSegment
     @cacheControl(scope: PRIVATE, maxAge: SHORT)
+    @auth(scope: PUBLIC)
+  generateQuoteSuggestion(input: GenerateQuoteSuggestionInput): QuoteSuggestion!
+    @validateStoreUserAccess
+    @withPermissions
+    @withSession
+    @withSegment
+    @cacheControl(scope: PRIVATE, maxAge: SHORT)
+    @auth(scope: PUBLIC)
 }
 
 type Mutation {
@@ -50,21 +63,22 @@ type Mutation {
     @withPermissions
     @withSession
     @withSegment
+    @auth(scope: PUBLIC)
   updateQuote(input: QuoteUpdateInput!): String
     @validateStoreUserAccess
     @withPermissions
     @withSession
+    @auth(scope: PUBLIC)
   useQuote(id: String, orderFormId: String): String
     @validateStoreUserAccess
     @withPermissions
     @withSession
-  clearCart(orderFormId: String): String @validateStoreUserAccess
+    @auth(scope: PUBLIC)
+  clearCart(orderFormId: String): String 
+    @validateStoreUserAccess
+    @auth(scope: PUBLIC)
   saveAppSettings(input: AppSettingsInput!): AppSettings
     @validateAdminUserAccess
     @cacheControl(scope: PRIVATE)
-  generateQuoteSuggestion(input: GenerateQuoteSuggestionInput): Quote!
-    @validateStoreUserAccess
-    @withPermissions
-    @withSession
-    @withSegment
+    @auth(scope: PUBLIC)
 }

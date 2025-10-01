@@ -10,6 +10,190 @@ import GraphQLError from '../../utils/GraphQLError'
 import { checkConfig } from '../utils/checkConfig'
 import SellerQuotesController from '../utils/sellerQuotesController'
 
+const TOP_N = 10
+const DEFAULT_PER_PAGE = 15
+const DEFAULT_MAX_ORDERS = 60
+const SUGGESTED_CACHE_ENTITY = 'suggested_quotes_cache'
+const CACHE_TTL_HOURS = 24
+
+async function getTopSkusFromCache(ctx: Context, userKey: string) {
+  const { masterdata } = ctx.clients as any
+  try {
+    const cacheResults = await masterdata.searchDocuments({
+      dataEntity: SUGGESTED_CACHE_ENTITY,
+      fields: ['id', 'items', 'cachedAt'],
+      page: 1,
+      pageSize: 1,
+      where: `userKey=${userKey}`,
+    })
+
+    if (cacheResults.length > 0) {
+      const { items, cachedAt} = cacheResults[0]
+      const cacheAge = Date.now() - new Date(cachedAt).getTime()
+      const cacheExpired = cacheAge > (CACHE_TTL_HOURS * 60 * 60 * 1000)
+
+      if (!cacheExpired && items) {
+        return JSON.parse(items)
+      }
+    }
+  } catch (error) {
+    ctx.vtex?.logger?.warn({ msg: 'Failed to get cached suggestions', userKey, error })
+  }
+  return null
+}
+
+async function saveCache(ctx: Context, userKey: string, items: any[]) {
+  const { masterdata } = ctx.clients as any
+  try {
+    const existing = await masterdata.searchDocuments({
+      dataEntity: SUGGESTED_CACHE_ENTITY,
+      fields: ['id'],
+      page: 1,
+      pageSize: 1,
+      where: `userKey=${userKey}`,
+    })
+
+    const cacheData = {
+      cachedAt: new Date().toISOString(),
+      items: JSON.stringify(items),
+      userKey,
+    }
+
+    if (existing.length > 0) {
+      await masterdata.updatePartialDocument({
+        dataEntity: SUGGESTED_CACHE_ENTITY,
+        fields: cacheData,
+        id: existing[0].id,
+      })
+    } else {
+      await masterdata.createDocument({
+        dataEntity: SUGGESTED_CACHE_ENTITY,
+        fields: cacheData,
+      })
+    }
+  } catch (error) {
+    ctx.vtex?.logger?.warn({ msg: 'Failed to cache suggestions', userKey, error })
+  }
+}
+
+async function computeTopSkus(ctx: Context, userKey: string, topN: number) {
+  const { oms } = ctx.clients
+  const authCookie = ctx.vtex.authToken || ctx.cookies?.get('VtexIdclientAutCookie') || ''
+  let page = 1
+  let fetched = 0
+
+  // Track total quantity for sorting and purchase history for quantity calculation
+  const qtyBySku = new Map<string, {
+    totalQty: number
+    lastPurchasedAt?: string
+    itemData: any
+    orderQuantities: number[] // Track quantities from each order (most recent first)
+  }>()
+
+  const ninetyDaysAgo = new Date()
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+  const dateFilter = ninetyDaysAgo.toISOString().split('T')[0]
+
+  while (fetched < DEFAULT_MAX_ORDERS) {
+    const params: any = {
+      f_clientEmail: userKey.includes('@') ? userKey : undefined,
+      f_creationDate: `creationDate:[${dateFilter} TO *]`,
+      orderBy: 'creationDate,desc',
+      page,
+      per_page: DEFAULT_PER_PAGE,
+    }
+
+    const list = await oms.listOrders(authCookie, params)
+    const orders: any[] = list?.list || list?.orders || []
+    if (!orders.length) {
+      break
+    }
+
+    for (const o of orders) {
+      if (fetched >= DEFAULT_MAX_ORDERS) {
+        break
+      }
+
+      const orderId = o.orderId || o.orderIdFormatted || o.orderIdClean
+      if (!orderId) {
+        continue
+      }
+
+      const full = await oms.getOrder(orderId, authCookie)
+      const items: any[] = full?.items || []
+      const createdAt: string | undefined = full?.creationDate || o?.creationDate
+
+      for (const it of items) {
+        const skuId = String(it.id ?? it.skuId ?? '')
+        const quantity = Number(it.quantity || 0)
+
+        if (!skuId || !quantity) {
+          continue
+        }
+
+        const prev = qtyBySku.get(skuId) || {
+          itemData: null,
+          orderQuantities: [],
+          totalQty: 0,
+        }
+
+        const lastPurchasedAt =
+            createdAt && (!prev.lastPurchasedAt || createdAt > prev.lastPurchasedAt)
+                ? createdAt
+                : prev.lastPurchasedAt
+
+        const itemData = prev.itemData || {
+          id: skuId,
+          imageUrl: it.imageUrl || '',
+          listPrice: Number(it.listPrice || it.price || it.sellingPrice || 0) / 100,
+          name: it.name || it.skuName || `Product ${skuId}`,
+          price: Number(it.price || it.sellingPrice || 0) / 100,
+          productId: it.productId || skuId,
+          refId: it.refId || '',
+          seller: it.seller || '1',
+          sellingPrice: Number(it.sellingPrice || it.price || 0) / 100,
+          skuName: it.skuName || it.name || `SKU ${skuId}`,
+        }
+
+        qtyBySku.set(skuId, {
+          itemData,
+          lastPurchasedAt,
+          orderQuantities: [...prev.orderQuantities, quantity],
+          totalQty: prev.totalQty + quantity,
+        })
+      }
+
+      fetched++
+    }
+
+    if (orders.length < DEFAULT_PER_PAGE) {
+      break
+    }
+
+    page++
+  }
+
+  const result = Array.from(qtyBySku.entries())
+      .sort((a, b) => b[1].totalQty - a[1].totalQty)
+      .slice(0, topN)
+      .map(([skuId, v]) => {
+        // Calculate suggested quantity based on last 2 orders
+        const last2Orders = v.orderQuantities.slice(0, 2)
+        const suggestedQty = last2Orders.length > 0
+          ? Math.round(last2Orders.reduce((sum, q) => sum + q, 0) / last2Orders.length)
+          : 1 // Default to 1 if no recent orders
+
+        return {
+          itemData: v.itemData,
+          lastPurchasedAt: v.lastPurchasedAt,
+          qty: suggestedQty,
+          skuId,
+        }
+      })
+
+  return result
+}
+
 // This function checks if given email is an user part of a buyer org.
 export const isUserPartOfBuyerOrg = async (email: string, ctx: Context) => {
   const {
@@ -405,5 +589,67 @@ export const Query = {
     )
 
     return verifiedSellers.filter(Boolean)
+  },
+  generateQuoteSuggestion: async (_: unknown, args: any, ctx: Context) => {
+    try {
+      const { input } = args || {}
+      const { sessionData, storefrontPermissions } = ctx.vtex as any
+
+      const profileEmail = sessionData?.namespaces?.profile?.email?.value
+      const adminEmail = sessionData?.namespaces?.authentication?.adminUserEmail?.value
+      const email = profileEmail || adminEmail
+
+      if (!email) {
+        throw new Error('Not authenticated: missing user email in session')
+      }
+
+      const isAdminUser = !!adminEmail
+      const hasCreateQuotesPermission = storefrontPermissions?.permissions?.includes('create-quotes')
+
+      if (!isAdminUser && !hasCreateQuotesPermission) {
+        throw new Error('operation-not-permitted')
+      }
+
+      const userKey = email
+      const topN = Number(input?.topN ?? TOP_N)
+
+      let topItems = await getTopSkusFromCache(ctx, userKey).catch((err) => {
+        ctx.vtex?.logger?.warn({ msg: 'Cache fetch failed', userKey, error: err.message })
+        return null
+      })
+
+      if (!topItems) {
+        try {
+          topItems = await computeTopSkus(ctx, userKey, topN)
+          await saveCache(ctx, userKey, topItems).catch(() => undefined)
+        } catch (error) {
+          ctx.vtex?.logger?.error({
+            error: (error as any).message,
+            msg: 'Failed to compute top SKUs',
+            status: (error as any).response?.status,
+            statusText: (error as any).response?.statusText,
+            userKey,
+          })
+          throw new Error(`Failed to fetch order history: ${(error as any).message}`)
+        }
+      }
+
+      if (!topItems?.length) {
+        throw new Error('No items found for suggested quote')
+      }
+
+      const items = topItems.map((i: any) => ({
+        ...i.itemData,
+        quantity: Number(i.qty),
+      }))
+
+      return { items }
+    } catch (error) {
+      ctx.vtex?.logger?.error({
+        error: (error as any).message,
+        msg: 'generateQuoteSuggestion failed',
+      })
+      throw error
+    }
   },
 }
